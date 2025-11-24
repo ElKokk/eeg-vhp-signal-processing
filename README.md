@@ -1,0 +1,8 @@
+- `src/`      : Python modules
+- `config/`   : YAML configs (montages, filters, event codes, params)
+- `data/raw/` : raw CSVs from the EEG headset
+- `data/processed/` : cleaned / derived data
+- `results/`  : figures, tables, reports
+- `notebooks/`: exploratory notebooks
+- `envs/`     : conda env YAMLs for Snakemake
+- `Snakefile` : Snakemake workflow

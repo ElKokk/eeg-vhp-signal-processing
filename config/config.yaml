@@ -1,0 +1,24 @@
+project:
+  name: "eeg-vhp-pipeline"
+
+paths:
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  results_dir: "results"
+
+eeg:
+  sampling_rate: 512
+  montage: "pd_vhp_montage"
+
+events:
+  run_start: 333
+  stim_on: 1
+  stim_off: 11
+
+preprocessing:
+  bandpass:
+    l_freq: 1.0
+    h_freq: 80.0
+  notch:
+    freqs: [50, 100, 150, 200, 250]
+  reref: "nose"

@@ -1,0 +1,17 @@
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+.env
+
+.snakemake/
+
+
+data/raw/
+data/processed/
+results/
+logs/
+
+.ipynb_checkpoints/
