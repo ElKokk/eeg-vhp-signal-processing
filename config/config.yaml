@@ -7,18 +7,30 @@ paths:
   results_dir: "results"
 
 eeg:
-  sampling_rate: 512
   montage: "pd_vhp_montage"
-
-events:
-  run_start: 333
-  stim_on: 1
-  stim_off: 11
+  sampling_rate: 512
+  events:
+    run_start: 333
+    stim_on: 1
+    stim_off: 11
 
 preprocessing:
   bandpass:
     l_freq: 1.0
     h_freq: 80.0
   notch:
-    freqs: [50, 100, 150, 200, 250]
-  reref: "nose"
+    freqs: [50, 100, 150]
+  rereference: "nose"
+
+# 👇 THIS MUST BE AT THE ROOT (no extra indentation)
+recordings:
+  - "251120-1954_FREEEEG32_BOARD_baseline_with_VHP_powered_OFF"
+  - "251120-1954_FREEEEG32_BOARD_baseline_with_VHP_powered_ON_stim_ON_no_contact_c1_f22_v100"
+  - "251120-1954_FREEEEG32_BOARD_c1_f22_v100"
+  - "251120-1954_FREEEEG32_BOARD_c1_f24_v100"
+  - "251120-1954_FREEEEG32_BOARD_c1_f26_v100"
+  - "251120-1954_FREEEEG32_BOARD_c1_f28_v100"
+  - "251120-1954_FREEEEG32_BOARD_c1_f30_v100"
+  - "251120-1954_FREEEEG32_BOARD_c1_f32_v100"
+  - "251120-1954_FREEEEG32_BOARD_c1_f34_v100"
+  - "251120-1954_FREEEEG32_BOARD_c1_f36_v100"
