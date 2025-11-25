@@ -1,0 +1,26 @@
+montages:
+  pd_vhp_montage:
+    description: "FreeEEG32 PD vibrotactile experiment, nose reference"
+    sampling_rate_default: 512.0
+
+    # Columns in the raw CSV
+    columns:
+      sample_counter: 0
+      timestamp: 33
+      marker: 34
+
+    # Value that indicates a dead / unused channel
+    adc_sentinel: -312500.03125
+
+    # Map column indices -> logical channel names
+    channels:
+      1: "T7"    # CH01
+      2: "C3"    # CH02
+      5: "T8"    # CH05
+      6: "FC4"   # CH06
+      9: "FC3"   # CH09
+      10: "C4"   # CH10
+      13: "CP3"  # CH13
+      14: "CP4"  # CH14
+
+    # You could later add more (e.g., CH03 etc.), but these are your main EEGs
