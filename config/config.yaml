@@ -18,9 +18,23 @@ preprocessing:
   bandpass:
     l_freq: 1.0
     h_freq: 80.0
+    order: 4         # filter order (we’ll use a 4th order Butterworth)
   notch:
     freqs: [50, 100, 150]
-  rereference: "nose"
+    Q: 30            # quality factor for notch (higher = narrower)
+  rereference: "nose"    # for later; we won't change reference yet
+
+analysis:
+  psd:
+    fmin: 1.0
+    fmax: 60.0
+    nperseg: 4096
+  spectrogram:
+    fmin: 1.0
+    fmax: 60.0
+    nperseg: 4096
+    noverlap_ratio: 0.75
+
 
 # 👇 THIS MUST BE AT THE ROOT (no extra indentation)
 recordings:
