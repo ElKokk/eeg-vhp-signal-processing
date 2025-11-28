@@ -15,3 +15,31 @@ results/
 logs/
 
 .ipynb_checkpoints/
+
+# raw and processed data
+data/
+results/
+.snakemake/
+
+# CSV artifacts
+*.structured.csv
+*.preproc.csv
+*.reref.csv
+*.psd.csv
+*.psd_on.csv
+*.snr.csv
+
+# raw and processed data
+data/
+results/
+.snakemake/
+
+# CSV artifacts
+*.structured.csv
+*.preproc.csv
+*.reref.csv
+*.psd.csv
+*.psd_on.csv
+*.snr.csv
+
+
