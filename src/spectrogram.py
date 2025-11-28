@@ -3,11 +3,7 @@
 """
 src/spectrogram.py
 
-Compute spectrograms (time–frequency) for each EEG channel in a preprocessed CSV
-and save one PNG per channel, with event markers (ON/OFF) overlaid.
-
-Output layout:
-  results/spectrograms/<condition>/<stem>_<channel>_spec.png
+Compute spectrograms for EEG + Bipolar channels.
 """
 
 import argparse
@@ -20,168 +16,111 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.signal import spectrogram
 
-from .config import load_main_config, load_montages, get_montage
+from src.config import load_main_config, load_montages, get_montage
+
+
+def _get_channels_with_bipolar(df: pd.DataFrame, cfg: dict, montage) -> List[str]:
+    base_eeg = [ch for ch in montage.channel_map.values() if ch in df.columns]
+    reref_cfg = cfg.get("analysis", {}).get("reref", {})
+    bipolar_pairs = reref_cfg.get("bipolar_pairs", []) or []
+
+    def parse_pair(pair):
+        if isinstance(pair, str):
+            if "-" not in pair: return None
+            a, b = pair.split("-", 1)
+            return a.strip(), b.strip()
+        if isinstance(pair, (list, tuple)) and len(pair) == 2:
+            return str(pair[0]).strip(), str(pair[1]).strip()
+        return None
+
+    extra = []
+    for pair in bipolar_pairs:
+        parsed = parse_pair(pair)
+        if parsed:
+            col = f"{parsed[0]}-{parsed[1]}"
+            if col in df.columns: extra.append(col)
+
+    return list(dict.fromkeys(base_eeg + extra))
 
 
 def infer_condition(stem: str) -> str:
-    """
-    Infer condition label from filename stem.
-
-    Same logic as in src.psd:
-      - baseline_with_VHP_powered_OFF                -> baseline_vhp_off
-      - baseline_with_VHP_powered_ON_stim_ON_no_contact -> baseline_vhp_on_no_contact
-      - _fXX_ stim files                             -> XXHz
-      - other baselines                              -> baseline_other
-      - fallback                                     -> other
-    """
-    lower = stem.lower()
-
-    if "baseline_with_vhp_powered_off" in lower:
-        return "baseline_vhp_off"
-
-    if "baseline_with_vhp_powered_on_stim_on_no_contact" in lower:
-        return "baseline_vhp_on_no_contact"
-
     m = re.search(r"_f(\d+)", stem)
-    if m:
-        return f"{m.group(1)}Hz"
-
-    if "baseline" in lower:
-        return "baseline_other"
-
+    if m: return f"{m.group(1)}Hz"
+    if "baseline" in stem.lower(): return "baseline"
     return "other"
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Compute spectrograms per channel from preprocessed EEG CSV."
-    )
-    parser.add_argument("--input", required=True, help="Path to preprocessed CSV")
-    parser.add_argument(
-        "--out_dir",
-        required=True,
-        help="Base output directory for spectrogram PNGs (subfolders per condition)",
-    )
-    parser.add_argument("--config", default="config/config.yaml", help="Main config YAML")
-    parser.add_argument("--montages", default="config/montages.yaml", help="Montages YAML")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", required=True)
+    parser.add_argument("--out_flag", required=True)
+    parser.add_argument("--config", default="config/config.yaml")
+    parser.add_argument("--montages", default="config/montages.yaml")
     args = parser.parse_args()
 
-    cfg = load_main_config(args.config)
-    montages = load_montages(args.montages)
-    montage = get_montage(cfg, montages)
-
     in_path = Path(args.input)
-    df = pd.read_csv(in_path)
+    if not in_path.exists(): raise FileNotFoundError(in_path)
 
-    # ----- sampling rate -----
-    if "timestamp" not in df.columns:
-        raise ValueError("Column 'timestamp' not found in preprocessed CSV.")
-    dt = df["timestamp"].diff().dropna()
-    fs = float(1.0 / dt.median()) if len(dt) > 0 else float(cfg["eeg"]["sampling_rate"])
-    print(f"[SPEC] {in_path.name}: fs ≈ {fs:.2f} Hz")
+    cfg = load_main_config(args.config)
+    montage = get_montage(cfg, load_montages(args.montages))
 
-    # ----- EEG channels -----
-    eeg_channels: List[str] = [
-        ch for ch in montage.channel_map.values() if ch in df.columns
-    ]
-    if not eeg_channels:
-        raise ValueError(
-            "No EEG channels found in preprocessed CSV. "
-            "Check montage and preprocess output."
-        )
-    print(f"[SPEC] EEG channels: {eeg_channels}")
-
-    # ----- spectrogram params -----
     spec_cfg = cfg.get("analysis", {}).get("spectrogram", {})
     fmin = float(spec_cfg.get("fmin", 1.0))
     fmax = float(spec_cfg.get("fmax", 60.0))
-    nperseg = int(spec_cfg.get("nperseg", 4096))
-    noverlap_ratio = float(spec_cfg.get("noverlap_ratio", 0.75))
+    nperseg = int(spec_cfg.get("nperseg", 2048))
+    noverlap = int(nperseg * float(spec_cfg.get("noverlap_ratio", 0.75)))
 
-    print(
-        f"[SPEC] Params: fmin={fmin}, fmax={fmax}, "
-        f"nperseg={nperseg}, noverlap_ratio={noverlap_ratio}"
-    )
+    df = pd.read_csv(in_path)
+    dt = df["timestamp"].diff().dropna()
+    fs = float(1.0 / dt.median()) if len(dt) > 0 else 512.0
 
-    base_out_dir = Path(args.out_dir)
-    base_out_dir.mkdir(parents=True, exist_ok=True)
+    channels = _get_channels_with_bipolar(df, cfg, montage)
+    print(f"[SPECTROGRAM] Channels: {channels}")
 
-    # Decide condition subfolder from filename stem
-    stem = in_path.stem
-    cond_label = infer_condition(stem)
-    out_dir = base_out_dir / cond_label
+    condition = infer_condition(in_path.stem)
+    out_dir = Path(args.out_flag).parent / condition
     out_dir.mkdir(parents=True, exist_ok=True)
-    print(f"[SPEC] Condition '{cond_label}', saving figures into: {out_dir}")
 
-    # ----- event markers -----
-    if "marker" not in df.columns or "t_rel" not in df.columns:
-        raise ValueError("Columns 'marker' or 't_rel' not found in preprocessed CSV.")
+    # Event markers
+    events = df[df["marker"] != 0] if "marker" in df.columns else pd.DataFrame()
 
-    markers = df["marker"].values
-    t_rel = df["t_rel"].values
-    event_idx = np.where(markers != 0)[0]
-    event_onsets = t_rel[event_idx]
-    event_labels = [str(int(markers[i])) for i in event_idx]
+    t_start = df["t_rel"].iloc[0]
 
-    # ----- per-channel spectrogram -----
-    for ch in eeg_channels:
+    for ch in channels:
         sig = df[ch].to_numpy().astype(float)
+        eff_nperseg = min(nperseg, len(sig))
 
-        nperseg_eff = min(nperseg, len(sig))
-        if nperseg_eff < 16:
-            raise ValueError(
-                f"Signal too short for spectrogram: channel {ch}, n_samples={len(sig)}"
-            )
-        noverlap = int(nperseg_eff * noverlap_ratio)
+        f, t_spec, Sxx = spectrogram(sig, fs=fs, nperseg=eff_nperseg, noverlap=noverlap)
+        t_spec += t_start  # shift time
 
-        f, t, Sxx = spectrogram(
-            sig,
-            fs=fs,
-            nperseg=nperseg_eff,
-            noverlap=noverlap,
-            scaling="density",
-            mode="psd",
-        )
-
-        # Restrict frequency range
         fmask = (f >= fmin) & (f <= fmax)
         f_sel = f[fmask]
-        Sxx_sel = Sxx[fmask, :]
+        Sxx_db = 10 * np.log10(Sxx[fmask, :] + 1e-20)
 
-        # Convert to relative dB
-        Sxx_db = 10.0 * np.log10(Sxx_sel + 1e-20)
+        # Relative Power (subtract median to see changes)
         Sxx_db_rel = Sxx_db - np.median(Sxx_db)
 
-        fig, ax = plt.subplots(figsize=(10, 5))
-        pcm = ax.pcolormesh(t, f_sel, Sxx_db_rel, shading="gouraud", cmap="inferno")
+        fig, ax = plt.subplots(figsize=(12, 5))
+        pcm = ax.pcolormesh(t_spec, f_sel, Sxx_db_rel, shading="gouraud", cmap="inferno")
+        fig.colorbar(pcm, ax=ax, label="Relative dB")
+        ax.set_title(f"Spectrogram: {ch} ({condition})")
+        ax.set_ylabel("Freq (Hz)")
         ax.set_xlabel("Time (s)")
-        ax.set_ylabel("Frequency (Hz)")
-        ax.set_ylim(fmin, fmax)
-        ax.set_title(f"Spectrogram ({ch}) — {in_path.name}")
-        fig.colorbar(pcm, ax=ax, label="Relative power (dB)")
 
-        # Event markers as dashed vertical lines
-        for onset, label in zip(event_onsets, event_labels):
-            if onset >= t.min() and onset <= t.max():
-                ax.axvline(onset, linestyle="--", linewidth=0.8, color="white")
-                y_text = fmin + 0.02 * (fmax - fmin)
-                ax.text(
-                    onset,
-                    y_text,
-                    label,
-                    rotation=90,
-                    va="bottom",
-                    ha="center",
-                    fontsize=7,
-                    color="white",
-                )
+        # Overlay events
+        if not events.empty:
+            for t_ev, lab in zip(events["t_rel"], events["marker"]):
+                if t_spec.min() <= t_ev <= t_spec.max():
+                    ax.axvline(t_ev, color='white', linestyle='--', alpha=0.7)
+                    ax.text(t_ev, fmax, str(int(lab)), color='white', verticalalignment='top')
 
         plt.tight_layout()
-        out_file = out_dir / f"{stem}_{ch}_spec.png"
-        plt.savefig(out_file, dpi=200)
+        plt.savefig(out_dir / f"{in_path.stem}_{ch}_spec.png", dpi=100)
         plt.close()
 
-        print(f"[SPEC] Saved spectrogram for {ch} to {out_file}")
+    with open(args.out_flag, "w") as f:
+        f.write("ok")
+    print(f"[SPECTROGRAM] Done. {out_dir}")
 
 
 if __name__ == "__main__":

@@ -3,72 +3,60 @@
 """
 src/psd.py
 
-Compute PSDs (Welch) for each EEG channel in a preprocessed CSV and save:
-
-- A long-format CSV with columns: freq, channel, psd, psd_db
-- A simple multi-channel PSD plot (PNG)
-
-Files are written into:
-  results/psd/<condition>/<stem>.psd.csv
-  results/psd/<condition>/<stem>.psd.png
-
-where <condition> is:
-  - "baseline_vhp_off"                for baseline_with_VHP_powered_OFF
-  - "baseline_vhp_on_no_contact"      for baseline_with_VHP_powered_ON_stim_ON_no_contact...
-  - "<freq>Hz"                        for stim runs (c1_f22, c1_f24, etc.)
-  - "baseline_other" / "other"        as fallbacks
+Compute PSDs (Welch) for EEG + Bipolar channels.
 """
 
 import argparse
 from pathlib import Path
 from typing import List
-import re
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.signal import welch
 
-from .config import load_main_config, load_montages, get_montage
+from src.config import load_main_config, load_montages, get_montage
 
 
-def infer_condition(stem: str) -> str:
-    """
-    Infer condition label from filename stem.
+def _get_channels_with_bipolar(df: pd.DataFrame, cfg: dict, montage) -> List[str]:
+    """Return list of channels to analyse = montage EEG + any bipolar in df."""
+    # 1. Base EEG channels
+    base_eeg = [ch for ch in montage.channel_map.values() if ch in df.columns]
 
-    Order matters: we check specific baselines BEFORE generic _fXX_ matches.
-    """
-    lower = stem.lower()
+    # 2. Bipolar channels defined in config
+    reref_cfg = cfg.get("analysis", {}).get("reref", {})
+    bipolar_pairs = reref_cfg.get("bipolar_pairs", []) or []
 
-    if "baseline_with_vhp_powered_off" in lower:
-        return "baseline_vhp_off"
+    def parse_pair(pair):
+        if isinstance(pair, str):
+            if "-" not in pair: return None
+            a, b = pair.split("-", 1)
+            return a.strip(), b.strip()
+        if isinstance(pair, (list, tuple)) and len(pair) == 2:
+            return str(pair[0]).strip(), str(pair[1]).strip()
+        return None
 
-    if "baseline_with_vhp_powered_on_stim_on_no_contact" in lower:
-        return "baseline_vhp_on_no_contact"
+    extra_channels = []
+    for pair in bipolar_pairs:
+        parsed = parse_pair(pair)
+        if parsed:
+            a, b = parsed
+            col_name = f"{a}-{b}"
+            if col_name in df.columns:
+                extra_channels.append(col_name)
 
-    # Generic stim runs with fXX
-    m = re.search(r"_f(\d+)", stem)
-    if m:
-        return f"{m.group(1)}Hz"
-
-    if "baseline" in lower:
-        return "baseline_other"
-
-    return "other"
+    # Combine and deduplicate
+    all_channels = base_eeg + extra_channels
+    return list(dict.fromkeys(all_channels))
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Compute PSDs per channel from preprocessed EEG CSV."
-    )
-    parser.add_argument("--input", required=True, help="Path to preprocessed CSV")
-    parser.add_argument(
-        "--out_dir",
-        required=True,
-        help="Base output directory for PSD files (subfolders per condition)",
-    )
-    parser.add_argument("--config", default="config/config.yaml", help="Main config YAML")
-    parser.add_argument("--montages", default="config/montages.yaml", help="Montages YAML")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", required=True)
+    parser.add_argument("--out_csv", required=True)
+    parser.add_argument("--out_fig", required=True)
+    parser.add_argument("--config", default="config/config.yaml")
+    parser.add_argument("--montages", default="config/montages.yaml")
     args = parser.parse_args()
 
     in_path = Path(args.input)
@@ -79,89 +67,60 @@ def main():
     montages = load_montages(args.montages)
     montage = get_montage(cfg, montages)
 
-    # ---- load preprocessed data ----
     df = pd.read_csv(in_path)
 
-    # Sampling rate from timestamps
+    # Estimate fs
     if "timestamp" not in df.columns:
-        raise ValueError("Column 'timestamp' not found in preprocessed CSV.")
+        raise ValueError("Column 'timestamp' not found.")
     dt = df["timestamp"].diff().dropna()
-    fs = float(1.0 / dt.median()) if len(dt) > 0 else float(cfg["eeg"]["sampling_rate"])
-    print(f"[PSD] {in_path.name}: fs ≈ {fs:.2f} Hz")
+    fs = float(1.0 / dt.median()) if len(dt) > 0 else 512.0
+    print(f"[PSD] fs ≈ {fs:.2f} Hz")
 
-    # EEG channels: those defined in montage and actually present
-    eeg_channels: List[str] = [
-        ch for ch in montage.channel_map.values() if ch in df.columns
-    ]
-    if not eeg_channels:
-        raise ValueError(
-            "No EEG channels found in preprocessed CSV. "
-            "Check montage and preprocess output."
-        )
-    print(f"[PSD] EEG channels: {eeg_channels}")
+    # Get channels (including C3-C4 if present)
+    channels = _get_channels_with_bipolar(df, cfg, montage)
+    print(f"[PSD] Analyzing channels: {channels}")
 
-    # PSD params from config (safe defaults)
+    # Config params
     psd_cfg = cfg.get("analysis", {}).get("psd", {})
     fmin = float(psd_cfg.get("fmin", 1.0))
     fmax = float(psd_cfg.get("fmax", 60.0))
-    nperseg = int(psd_cfg.get("nperseg", 4096))
+    nperseg = int(psd_cfg.get("nperseg", 2048))
 
-    print(f"[PSD] Params: fmin={fmin}, fmax={fmax}, nperseg={nperseg}")
+    out_csv = Path(args.out_csv)
+    out_fig = Path(args.out_fig)
+    out_csv.parent.mkdir(parents=True, exist_ok=True)
 
-    all_rows = []
-    plt.figure(figsize=(10, 6))
+    records = []
+    fig, ax = plt.subplots(figsize=(10, 6))
 
-    for ch in eeg_channels:
+    for ch in channels:
         sig = df[ch].to_numpy().astype(float)
-        nperseg_eff = min(nperseg, len(sig))
-        if nperseg_eff < 16:
-            raise ValueError(
-                f"Signal too short for PSD: channel {ch}, n_samples={len(sig)}"
-            )
 
-        freqs, Pxx = welch(sig, fs=fs, nperseg=nperseg_eff)
+        # Handle short signals
+        eff_nperseg = min(nperseg, len(sig))
+        freqs, psd_vals = welch(sig, fs=fs, nperseg=eff_nperseg, scaling='density')
 
-        # Restrict frequency range
         mask = (freqs >= fmin) & (freqs <= fmax)
-        freqs_sel = freqs[mask]
-        Pxx_sel = Pxx[mask]
-        PdB = 10.0 * np.log10(Pxx_sel + 1e-20)
+        f_sel = freqs[mask]
+        p_sel = psd_vals[mask]
+        p_db = 10 * np.log10(p_sel + 1e-20)
 
-        # Save rows for CSV
-        for f, p, pd_val in zip(freqs_sel, Pxx_sel, PdB):
-            all_rows.append(
-                {"freq": f, "channel": ch, "psd": p, "psd_db": pd_val}
-            )
+        ax.plot(f_sel, p_db, label=ch, linewidth=1.0, alpha=0.9)
 
-        # Plot
-        plt.plot(freqs_sel, PdB, label=ch)
+        for f, p, db in zip(f_sel, p_sel, p_db):
+            records.append({"freq": f, "channel": ch, "psd": p, "psd_db": db})
 
-    plt.xlabel("Frequency (Hz)")
-    plt.ylabel("Power (dB)")
-    plt.title(f"PSD (Welch) — {in_path.name}")
-    plt.grid(alpha=0.3)
-    plt.legend(fontsize="small", loc="upper right")
+    ax.set_xlabel("Frequency (Hz)")
+    ax.set_ylabel("PSD (dB/Hz)")
+    ax.set_title(f"PSD (Welch) - {in_path.stem}")
+    ax.grid(True, linestyle="--", alpha=0.5)
+    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
-
-    # ---- decide output folder & names ----
-    base_out_dir = Path(args.out_dir)
-    base_out_dir.mkdir(parents=True, exist_ok=True)
-
-    stem = in_path.stem  # e.g. 251120-..._c1_f24_v100.preproc
-    cond_label = infer_condition(stem)
-    cond_dir = base_out_dir / cond_label
-    cond_dir.mkdir(parents=True, exist_ok=True)
-
-    out_csv = cond_dir / f"{stem}.psd.csv"
-    out_fig = cond_dir / f"{stem}.psd.png"
-
-    pd.DataFrame(all_rows).to_csv(out_csv, index=False)
-    plt.savefig(out_fig, dpi=200)
+    plt.savefig(out_fig, dpi=150)
     plt.close()
 
-    print(f"[PSD] CSV written to {out_csv}")
-    print(f"[PSD] Figure written to {out_fig}")
-    print(f"[PSD] Condition='{cond_label}'")
+    pd.DataFrame(records).to_csv(out_csv, index=False)
+    print(f"[PSD] Done. Saved {out_csv}")
 
 
 if __name__ == "__main__":
