@@ -45,10 +45,9 @@ montages:
       32: "F8"
 
   pd_vhp_streaming:
-    description: "SynAmpsRT via CURRYStream, PD VHP experiment, nose reference"
+    description: "SynAmpsRT via CURRYStream"
     sampling_rate_default: 1000.0
 
-    # Matches your 35-col streaming CSV:
     #   col 0  -> timestamp-ish
     #   col 1–32 -> EEG channels (Iz..F8)
     #   col 33 -> constant 0.0 (ignored)

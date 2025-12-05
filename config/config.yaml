@@ -18,11 +18,11 @@ preprocessing:
   bandpass:
     l_freq: 1.0
     h_freq: 80.0
-    order: 4         # filter order (we’ll use a 4th order Butterworth)
+    order: 4         # filter order 4th order Butterworth
   notch:
     freqs: [50, 100, 150]
-    Q: 30            # quality factor for notch (higher = narrower)
-  rereference: "nose"    # for later; we won't change reference yet
+    Q: 30
+  rereference: "nose"
 
 analysis:
   psd:
@@ -36,7 +36,6 @@ analysis:
     noverlap_ratio: 0.75
 
 
-# 👇 THIS MUST BE AT THE ROOT (no extra indentation)
 recordings:
   - "251127-1729_STREAMING_BOARD_baseline_with_VHP_powered_OFF.csv"
   - "251127-1729_STREAMING_BOARD_baseline_with_VHP_powered_ON_stim_ON_no_contact_c1_f22_v100.csv"
