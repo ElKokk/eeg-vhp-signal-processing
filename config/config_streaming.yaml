@@ -1,0 +1,73 @@
+# config_streaming.yaml
+project:
+  name: "eeg-vhp-pipeline-streaming"
+
+paths:
+  raw_dir: "data/raw_streaming"
+  processed_dir: "data/processed_streaming"
+  results_dir: "results_streaming"
+
+eeg:
+  montage: "pd_vhp_streaming"
+  sampling_rate: 1000
+  events:
+    run_start: 333
+    stim_on: 1
+    stim_off: 11
+
+recordings:
+  - "251127-1729_STREAMING_BOARD_baseline_with_VHP_powered_OFF"
+  - "251127-1729_STREAMING_BOARD_baseline_with_VHP_powered_ON_stim_ON_no_contact_c1_f22_v100"
+  - "251127-1729_STREAMING_BOARD_c1_f22_v100"
+  - "251127-1729_STREAMING_BOARD_c1_f24_v100"
+  - "251127-1729_STREAMING_BOARD_c1_f26_v100"
+  - "251127-1729_STREAMING_BOARD_c1_f28_v100"
+  - "251127-1729_STREAMING_BOARD_c1_f30_v100"
+  - "251127-1729_STREAMING_BOARD_c1_f32_v100"
+  - "251127-1729_STREAMING_BOARD_c1_f34_v100"
+  - "251127-1729_STREAMING_BOARD_c1_f36_v100"
+
+# Global preprocessing parameters
+preprocessing:
+  bandpass:
+    l_freq: 1.0
+    h_freq: 200.0
+    order: 4
+  notch:
+    # mains + first harmonics; will be ignored automatically if > Nyquist
+    freqs: [50.0, 100.0, 150.0]
+    Q: 30.0
+
+analysis:
+  # PSD settings and which channels to plot
+  psd:
+    fmin: 1.0
+    fmax: 160.0
+    nperseg: 4096
+    # Edit this list to choose electrodes to plot
+    channels: ["C3", "Cz", "C4", "CP3", "CP4"]
+
+  # Spectrogram settings and which channels to plot
+  spectrogram:
+    win_sec: 2.0
+    step_sec: 0.25
+    fmin: 0.0
+    fmax: 160.0
+    # Same channel list by default
+    channels: ["C3", "Cz", "CP3", "CP4", "C4"]
+
+  reref:
+    # Optional bipolar derivations, all based on CAR data
+    bipolar_pairs:
+      - ["C3", "C4"]
+      - ["C3", "Cz"]
+      - ["Cz", "C4"]
+      - ["CP3", "CP4"]
+
+  snr:
+    # bandwidth around each target frequency (in Hz)
+    bandwidth: 1.0
+    # vibrotactile stim frequencies we care about
+    targets: [22, 24, 26, 28, 30, 32, 34, 36]
+    # frequencies to exclude when searching for noise floor (e.g. line noise)
+    exclude: [50, 100, 150, 200]

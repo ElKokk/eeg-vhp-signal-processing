@@ -43,6 +43,10 @@ def main():
     in_path = Path(args.psd_csv)
     df = pd.read_csv(in_path)
 
+    if "freq" not in df.columns:
+        raise ValueError(f"Column 'freq' not found in {in_path}")
+    if "channel" not in df.columns:
+        raise ValueError(f"Column 'channel' not found in {in_path}")
     if args.col not in df.columns:
         raise ValueError(f"PSD column '{args.col}' not in {in_path}")
 

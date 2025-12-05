@@ -3,24 +3,93 @@ montages:
     description: "FreeEEG32 PD vibrotactile experiment, nose reference"
     sampling_rate_default: 512.0
 
-    # Columns in the raw CSV
     columns:
       sample_counter: 0
       timestamp: 33
       marker: 34
 
-    # Value that indicates a dead / unused channel
     adc_sentinel: -312500.03125
 
-    # Map column indices -> logical channel names
     channels:
-      1: "T7"    # CH01
-      2: "C3"    # CH02
-      5: "T8"    # CH05
-      6: "FC4"   # CH06
-      9: "FC3"   # CH09
-      10: "C4"   # CH10
-      13: "CP3"  # CH13
-      14: "CP4"  # CH14
+      1: "Iz"
+      2: "PO9"
+      3: "PO10"
+      4: "O1"
+      5: "O2"
+      6: "P7"
+      7: "P3"
+      8: "Pz"
+      9: "P4"
+      10: "P8"
+      11: "TP9"
+      12: "TP10"
+      13: "CP5"
+      14: "CP1"
+      15: "CP2"
+      16: "CP6"
+      17: "T7"
+      18: "T8"
+      19: "C3"
+      20: "Cz"
+      21: "C4"
+      22: "FC5"
+      23: "FC1"
+      24: "FC2"
+      25: "FC6"
+      26: "FT9"
+      27: "FT10"
+      28: "F7"
+      29: "F3"
+      30: "Fz"
+      31: "F4"
+      32: "F8"
 
-    # You could later add more (e.g., CH03 etc.), but these are your main EEGs
+  pd_vhp_streaming:
+    description: "SynAmpsRT via CURRYStream, PD VHP experiment, nose reference"
+    sampling_rate_default: 1000.0
+
+    # Matches your 35-col streaming CSV:
+    #   col 0  -> timestamp-ish
+    #   col 1–32 -> EEG channels (Iz..F8)
+    #   col 33 -> constant 0.0 (ignored)
+    #   col 34 -> markers (333, 1, 11, ...)
+    columns:
+      sample_counter: 33
+      timestamp: 0
+      marker: 34
+
+    adc_sentinel: -312500.03125
+
+    channels:
+      1: "Iz"
+      2: "PO9"
+      3: "PO10"
+      4: "O1"
+      5: "O2"
+      6: "P7"
+      7: "P3"
+      8: "Pz"
+      9: "P4"
+      10: "P8"
+      11: "TP9"
+      12: "TP10"
+      13: "CP5"
+      14: "CP1"
+      15: "CP2"
+      16: "CP6"
+      17: "T7"
+      18: "T8"
+      19: "C3"
+      20: "Cz"
+      21: "C4"
+      22: "FC5"
+      23: "FC1"
+      24: "FC2"
+      25: "FC6"
+      26: "FT9"
+      27: "FT10"
+      28: "F7"
+      29: "F3"
+      30: "Fz"
+      31: "F4"
+      32: "F8"
